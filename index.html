@@ -1,197 +1,275 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>文字物理世界</title>
-    <style>
-        /* CSS样式，用于实现极简设计和元素布局 */
-        body {
-            margin: 0;
-            padding: 0;
-            overflow: hidden; /* 隐藏滚动条，让窗口成为封闭世界 */
-            background-color: #f0f0f0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-        }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>文字的物理世界 · Kawaii 版</title>
+  <style>
+    html,body{height:100%;}
+    body{
+      margin:0; background:#ffffff; color:#000;
+      font-family: ui-rounded, system-ui, -apple-system, "SF Pro Rounded", "Nunito", "Baloo 2", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
+      overflow:hidden;
+    }
 
-        #text-input {
-            position: absolute;
-            top: 30px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 80%;
-            max-width: 400px;
-            padding: 15px 20px;
-            font-size: 18px;
-            border: none;
-            border-radius: 50px;
-            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.15);
-            text-align: center;
-            outline: none;
-            z-index: 10;
-            transition: box-shadow 0.3s ease;
-        }
+    /* 顶部工具栏 */
+    .toolbar{
+      position:fixed; inset:16px 16px auto 16px; z-index:10;
+      display:flex; gap:8px; align-items:center;
+      background:rgba(0,0,0,0.04);
+      border-radius:18px; padding:10px 12px;
+      box-shadow: 0 10px 24px rgba(0,0,0,.06);
+      border:1px solid rgba(0,0,0,.06);
+      backdrop-filter: blur(6px);
+    }
+    .toolbar input[type="text"]{
+      width:min(56vw,680px);
+      padding:12px 14px; border-radius:9999px; outline:none; border:1px solid rgba(0,0,0,0.08);
+      background:#fff; color:#111;
+      font-size:16px; box-shadow: 0 12px 30px rgba(74,144,226,.12);
+      text-align:center;
+    }
+    .btn{
+      padding:10px 14px; border-radius:12px; border:1px solid rgba(0,0,0,0.08);
+      background:#f8f8f8; color:#111; cursor:pointer; user-select:none;
+      font-size:14px; font-weight:600;
+    }
+    .hint{ color:#777; font-size:12px; margin-left:6px; }
 
-        #text-input:focus {
-            box-shadow: 0 5px 25px rgba(0, 123, 255, 0.3);
-        }
+    /* Canvas 全屏并禁用默认触摸手势（关键） */
+    #stage{ position:fixed; inset:0; touch-action:none; }
 
-        /* 这是文字块的通用样式，具体样式由JS动态添加 */
-        .letter {
-            position: absolute;
-            top: 0;
-            left: 0;
-            font-size: 48px; /* 字体大小 */
-            font-weight: bold;
-            color: white;
-            padding: 5px 10px;
-            border-radius: 8px;
-            cursor: grab; /* 提示用户可以拖动 */
-            user-select: none; /* 防止拖动时选中文本 */
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-        }
+    /* 文字块（更可爱） */
+    .letter{
+      position:absolute; left:0; top:0; will-change: transform;
+      transform-origin: center center;
+      pointer-events:none; /* 触摸事件给到 canvas */
+      font-weight:900; letter-spacing:.02em;
+      color:#fff; /* 文字白色 */
+      text-shadow: 0 1px 0 rgba(255,255,255,.25), 0 2px 10px rgba(0,0,0,.12);
+      /* 利用 CSS 变量做弹性缩放 */
+      --s: 1; /* scale */
+    }
+    .tile{
+      position:absolute; display:flex; align-items:center; justify-content:center;
+      padding:10px 14px; /* 比之前更饱满 */
+      border-radius:18px; /* 圆润 */
+      border:2px solid rgba(255,255,255,.85);
+      box-shadow:
+        0 10px 18px rgba(0,0,0,.10),
+        0 2px 0 rgba(0,0,0,.03) inset,
+        0 1px 0 rgba(255,255,255,.7) inset;
+      /* 胶囊高光 */
+    }
+    /* 玻璃高光 */
+    .tile::after{
+      content:""; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
+      background: linear-gradient(180deg, rgba(255,255,255,.45), rgba(255,255,255,.0) 40%);
+      mix-blend-mode: screen; opacity:.8;
+    }
 
-        .letter:active {
-            cursor: grabbing;
-        }
-    </style>
+    .corner{
+      position:fixed; right:12px; bottom:12px; color:#666; font-size:12px; opacity:.9;
+      background:rgba(0,0,0,.04); padding:6px 8px; border-radius:10px;
+      border:1px solid rgba(0,0,0,.06);
+    }
+  </style>
 </head>
 <body>
-    <!-- 文本输入框 -->
-    <input type="text" id="text-input" placeholder="输入文字，然后按回车...">
+  <div class="toolbar">
+    <input id="textInput" type="text" placeholder="输入文字，然后按 Enter（支持中文/英文/数字）" />
+    <button id="btnDrop" class="btn">掉落</button>
+    <span class="hint">拖拽字块可抛掷 · 手机触摸可用</span>
+  </div>
 
-    <!-- 引入Matter.js库 -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+  <canvas id="stage"></canvas>
 
-    <script>
-        // --- 模块别名 ---
-        const Engine = Matter.Engine,
-              Render = Matter.Render,
-              Runner = Matter.Runner,
-              Bodies = Matter.Bodies,
-              Composite = Matter.Composite,
-              Mouse = Matter.Mouse,
-              MouseConstraint = Matter.MouseConstraint;
+  <div class="corner">Kawaii 贴纸风 · 渐变糖果色 · 软弹动效</div>
 
-        // --- 物理世界初始化 ---
-        const engine = Engine.create();
-        const world = engine.world;
-        const render = Render.create({
-            element: document.body,
-            engine: engine,
-            options: {
-                width: document.documentElement.clientWidth,
-                height: document.documentElement.clientHeight,
-                wireframes: false,
-                background: 'transparent'
-            }
+  <!-- Matter.js -->
+  <script src="https://cdn.jsdelivr.net/npm/matter-js@0.20.0/build/matter.min.js"></script>
+  <script>
+  (()=>{
+    const { Engine, Render, Runner, World, Bodies, Body, Composite, Mouse, MouseConstraint, Events } = Matter;
+
+    // 基础场景
+    const canvas = document.getElementById('stage');
+    const engine = Engine.create();
+    engine.world.gravity.y = 1.2;
+
+    const render = Render.create({
+      canvas,
+      engine,
+      options:{
+        wireframes:false,
+        background:'#ffffff',
+        pixelRatio: Math.min(window.devicePixelRatio || 1, 2),
+      }
+    });
+    Render.run(render);
+    const runner = Runner.create();
+    Runner.run(runner, engine);
+
+    // 禁止默认触摸手势（双重保险）
+    render.canvas.style.touchAction = 'none';
+    render.canvas.style.userSelect = 'none';
+    render.canvas.style.webkitUserSelect = 'none';
+
+    // 窗口边界（墙体）
+    const walls = { top:null, bottom:null, left:null, right:null };
+    function makeWalls(){
+      const w = window.innerWidth, h = window.innerHeight;
+      const thickness = 60;
+      if(walls.top) World.remove(engine.world, [walls.top, walls.bottom, walls.left, walls.right]);
+      walls.top = Bodies.rectangle(w/2, -thickness/2, w+thickness*2, thickness, { isStatic:true });
+      walls.bottom = Bodies.rectangle(w/2, h+thickness/2, w+thickness*2, thickness, { isStatic:true });
+      walls.left = Bodies.rectangle(-thickness/2, h/2, thickness, h+thickness*2, { isStatic:true });
+      walls.right = Bodies.rectangle(w+thickness/2, h/2, thickness, h+thickness*2, { isStatic:true });
+      World.add(engine.world, [walls.top, walls.bottom, walls.left, walls.right]);
+    }
+    makeWalls();
+    window.addEventListener('resize', ()=>{
+      render.canvas.width = window.innerWidth; render.canvas.height = window.innerHeight;
+      makeWalls();
+    });
+
+    // 鼠标/触摸拖拽 —— 绑定到 canvas
+    const mouse = Mouse.create(render.canvas);
+    const mouseConstraint = MouseConstraint.create(engine, {
+      mouse,
+      constraint: { stiffness: 0.2, render: { visible: false } },
+    });
+    World.add(engine.world, mouseConstraint);
+    render.mouse = mouse;
+
+    // --- 可爱风参数 ---
+    const pastelGradients = [
+      ['#7BDFF2','#B2F7EF'],
+      ['#C4F1BE','#A1E5AB'],
+      ['#FDE2E4','#F9C6CF'],
+      ['#FFF1BA','#FFE08A'],
+      ['#E7C6FF','#C8B6FF'],
+      ['#B5EAEA','#EDF6F9'],
+      ['#FFD6A5','#FDFFB6'],
+      ['#BDE0FE','#A2D2FF'],
+      ['#FFCFD2','#F1C0E8'],
+      ['#FCE6B4','#FFD3A6'],
+    ];
+
+    function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+
+    // --- 文本块：DOM + 物理 ---
+    const container = document.body;
+
+    function spawnTextBlock(text, x, y){
+      const el = document.createElement('div');
+      el.className = 'letter tile';
+      el.textContent = text;
+
+      // 1) 糖果渐变色
+      const [c1,c2] = pick(pastelGradients);
+      el.style.background = `linear-gradient(180deg, ${c1}, ${c2})`;
+
+      // 2) 形状：单字圆形、多字圆角/胶囊
+      if(text.length === 1){
+        // 偶尔完全圆形
+        el.style.borderRadius = Math.random() < 0.6 ? '22px' : '9999px';
+      }else{
+        el.style.borderRadius = '18px';
+      }
+
+      // 3) 字号更大更可爱
+      const fontSize = (text.length === 1) ? 44 : Math.max(22, 36 - text.length*1.2);
+      el.style.fontSize = fontSize + 'px';
+      el.style.whiteSpace = 'pre';
+      el.style.lineHeight = '1.05';
+      container.appendChild(el);
+
+      // 尺寸测量
+      const rect = el.getBoundingClientRect();
+      const width = (rect.width || 20) + 14;
+      const height = (rect.height || 20) + 14;
+
+      // 物理刚体
+      const body = Bodies.rectangle(x, y, width, height, {
+        restitution: 0.38,
+        friction: 0.22,
+        frictionStatic: 0.85,
+        frictionAir: 0.02,
+        density: 0.0022,
+        chamfer: { radius: 18 }
+      });
+      body.plugin = { _el: el, _scale: 1 };
+      World.add(engine.world, body);
+
+      // 轻微初速度 + 旋转
+      Body.setVelocity(body, { x: (Math.random()*2-1)*1.2, y: -1.2 });
+      Body.setAngularVelocity(body, (Math.random()*2-1)*0.06);
+    }
+
+    // DOM 与物理同步（加入 scale 变量）
+    Events.on(engine, 'afterUpdate', ()=>{
+      const bodies = Composite.allBodies(engine.world);
+      for(const b of bodies){
+        const el = b.plugin && b.plugin._el; if(!el) continue;
+        el.style.transform = `translate(${b.position.x - el.offsetWidth/2}px, ${b.position.y - el.offsetHeight/2}px) rotate(${b.angle}rad) scale(var(--s,1))`;
+      }
+    });
+
+    // 碰撞时“Q 弹”一下
+    Events.on(engine, 'collisionStart', (e)=>{
+      for(const pair of e.pairs){
+        [pair.bodyA, pair.bodyB].forEach(b=>{
+          const el = b.plugin && b.plugin._el; if(!el) return;
+          el.style.setProperty('--s','0.94');
+          clearTimeout(el._squishT);
+          el._squishT = setTimeout(()=> el.style.setProperty('--s','1'), 120);
         });
-        const runner = Runner.create();
-        Runner.run(runner, engine);
+      }
+    });
 
-        // --- 边界创建与管理 ---
-        let ground, leftWall, rightWall, ceiling;
+    // 拖拽开始/结束时的“弹”效果
+    Events.on(mouseConstraint, 'startdrag', ({ body })=>{
+      const el = body && body.plugin && body.plugin._el; if(!el) return;
+      el.style.setProperty('--s','1.07');
+    });
+    Events.on(mouseConstraint, 'enddrag', ({ body })=>{
+      const el = body && body.plugin && body.plugin._el; if(!el) return;
+      el.style.setProperty('--s','1');
+    });
 
-        function setupBoundaries() {
-            const wallOptions = { isStatic: true, restitution: 0.5, friction: 0.1 };
-            const width = document.documentElement.clientWidth;
-            const height = document.documentElement.clientHeight;
+    // 输入与掉落
+    const input = document.getElementById('textInput');
+    document.getElementById('btnDrop').addEventListener('click', dropFromInput);
+    input.addEventListener('keydown', e=>{ if(e.key==='Enter') dropFromInput(); });
 
-            ground = Bodies.rectangle(width / 2, height + 25, width, 50, wallOptions);
-            leftWall = Bodies.rectangle(-25, height / 2, 50, height, wallOptions);
-            rightWall = Bodies.rectangle(width + 25, height / 2, 50, height, wallOptions);
-            ceiling = Bodies.rectangle(width / 2, -25, width, 50, wallOptions);
+    function dropFromInput(){
+      const text = input.value.trim();
+      if(!text) return;
+      const rect = input.getBoundingClientRect();
+      const canvasRect = canvas.getBoundingClientRect();
+      const baseX = rect.left + rect.width/2 - canvasRect.left;
+      const baseY = rect.bottom - canvasRect.top + 10;
 
-            Composite.add(world, [ground, leftWall, rightWall, ceiling]);
-        }
+      // 字符拆分：更稀疏一点
+      let startX = baseX - text.length*14;
+      [...text].forEach((ch,i)=>{
+        spawnTextBlock(ch, startX + i*28, baseY);
+      });
+      input.value = '';
+    }
 
-        // --- 鼠标交互 ---
-        const mouse = Mouse.create(document.body);
-        const mouseConstraint = MouseConstraint.create(engine, {
-            mouse: mouse,
-            constraint: { stiffness: 0.2, render: { visible: false } }
-        });
-        Composite.add(world, mouseConstraint);
+    // 初始提示（可删）
+    setTimeout(()=>{
+      const tip = '星·光·雨·夏·果·云·风·喵';
+      const w = window.innerWidth; const topY = -40;
+      [...tip].forEach((t,i)=>{
+        const x = 40 + Math.random()*(w-80);
+        setTimeout(()=> spawnTextBlock(t, x, topY), i*60);
+      });
+    }, 300);
 
-        // --- DOM元素与物理引擎的同步 ---
-        const domBodies = [];
-        function syncDomAndPhysics() {
-            domBodies.forEach(item => {
-                const { domElement, body } = item;
-                const { x, y } = body.position;
-                const angle = body.angle;
-                domElement.style.transform = `translate(${x - domElement.offsetWidth / 2}px, ${y - domElement.offsetHeight / 2}px) rotate(${angle}rad)`;
-            });
-            requestAnimationFrame(syncDomAndPhysics);
-        }
-        requestAnimationFrame(syncDomAndPhysics);
-
-        // --- 文字生成函数 ---
-        const textInput = document.getElementById('text-input');
-        const colors = ['#e74c3c', '#3498db', '#2ecc71', '#f1c40f', '#9b59b6', '#1abc9c', '#e67e22'];
-
-        function createTextBody(character, x, y) {
-            const domElement = document.createElement('div');
-            domElement.classList.add('letter');
-            domElement.textContent = character;
-            domElement.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
-            document.body.appendChild(domElement);
-
-            const width = domElement.offsetWidth;
-            const height = domElement.offsetHeight;
-            const body = Bodies.rectangle(x, y, width, height, {
-                restitution: 0.6,
-                friction: 0.3,
-                density: 0.001,
-                angle: Math.random() * Math.PI - Math.PI / 2
-            });
-            domBodies.push({ domElement, body });
-            Composite.add(world, body);
-        }
-        
-        function dropText(text) {
-            const textArray = text.split('');
-            const inputBoxRect = textInput.getBoundingClientRect();
-            
-            textArray.forEach((char, index) => {
-                if (char.trim() === '') return;
-                
-                const spawnX = inputBoxRect.left + (inputBoxRect.width / textArray.length) * (index + 0.5);
-                const spawnY = inputBoxRect.bottom + 20;
-
-                createTextBody(char, spawnX, spawnY);
-            });
-        }
-
-        // --- 事件监听 ---
-        textInput.addEventListener('keydown', (event) => {
-            if (event.key === 'Enter' && textInput.value.trim() !== '') {
-                dropText(textInput.value);
-                textInput.value = '';
-                event.preventDefault();
-            }
-        });
-
-        // --- 移动端键盘弹出修复 ---
-        const stopPropagation = (e) => e.stopPropagation();
-        textInput.addEventListener('mousedown', stopPropagation);
-        textInput.addEventListener('touchstart', stopPropagation);
-
-        // --- 窗口大小调整 ---
-        window.addEventListener('resize', () => {
-            render.canvas.width = document.documentElement.clientWidth;
-            render.canvas.height = document.documentElement.clientHeight;
-            if (ground) {
-                Composite.remove(world, [ground, leftWall, rightWall, ceiling]);
-            }
-            setupBoundaries();
-        });
-        
-        // --- 初始设置 ---
-        setupBoundaries();
-    </script>
+  })();
+  </script>
 </body>
 </html>
